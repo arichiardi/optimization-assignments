@@ -1,2 +1,5 @@
-# optimization-assignments
-Public repo containing the assignments (in Clojure) of Discrete Optimization by Professor Pascal Van Hentenryck
+# Discrete Optimization - Clojure assignments
+
+Public repository containing the assignments (in Clojure) of Coursera's Discrete Optimization course.<br/>
+<br/>
+Thank you Professor Van Hentenryck
