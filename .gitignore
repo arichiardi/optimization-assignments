@@ -1,3 +1,7 @@
+tmp.*
+*.data
+*.pyc
+
 /*.zip
 /*.tgz
 .DS_Store
@@ -41,7 +45,7 @@ target/
 # TeXlipse plugin
 .texlipse
 
-# Idea 
+# Idea
 .idea/
 *.iml
 

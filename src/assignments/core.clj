@@ -2,7 +2,9 @@
   (:require [clojure.string :as string :refer [trim blank?]]
             [clojure.java.io :as io :refer [reader]]
             [clojure.pprint :as pp :refer [pprint]]
-            [clojure.tools.cli :refer [parse-opts summarize]]))
+            [clojure.tools.cli :refer [parse-opts summarize]]
+            [criterium.core :refer [bench]]
+            [taoensso.timbre.profiling :refer [pspy pspy* profile defnp p p*]]))
 
 (declare cli-options)
 (declare error-msg)
@@ -24,13 +26,26 @@ the format specified by the problem and so that *solve-fn* can read." }
 
 (defn solver-main
   "Main function to call in order to solve a problem, re-binding
-  *parse-file-fn*, *solve-fn* *create-output-fn* to custom code"
+  *parse-file-fn*, *solve-fn* *create-output-fn* to custom functions."
   [& args]
   (let [{:keys [options arguments errors summary]} (parse-opts args cli-options)]
     (cond
      (not= (count arguments) 0) (exit 1 (summarize cli-options))
      errors (exit 1 (error-msg errors))
      :else (println (*create-output-fn* (*solve-fn* (*parse-file-fn* (options :file))))))))
+
+(defn benchmark-main
+  "Benchmark function that solves a problem, and like solver-main needs
+  re-binding of *parse-file-fn* and *solve-fn* to custom functions. It
+  does not print the output to stdout."
+  [& args]
+  (let [{:keys [options arguments errors summary]} (parse-opts args cli-options)]
+    (cond
+     (not= (count arguments) 0) (exit 1 (summarize cli-options))
+     errors (exit 1 (error-msg errors))
+     :else (let [input (*parse-file-fn* (options :file))]
+             (profile :info :Arithmetic (bench (*solve-fn* input)))))))
+
 
 (def ^{:private true} cli-options
   ;; An option with a required argument
