@@ -19,24 +19,24 @@
 
 (declare parse-file)
 (declare solve-greedy)
-(declare solve-dp-iterative)
+(declare solve-dp-memory-conscious-iterative)
 (declare output-string)
 
-(def repl-args "-f src/knapsack/data/ks_19_0")
+(def repl-args "-f src/knapsack/data/ks_100_1")
 (def generate-input #(parse-file (second (split repl-args #"[ ]"))))
 
 (defn -main
   "Solves the problem at hand and prints the result on stdout."
   [& args]
   (binding [*parse-file-fn* parse-file
-            *solve-fn* solve-dp-iterative
+            *solve-fn* solve-dp-memory-conscious-iterative
             *create-output-fn* output-string]
     (apply solver-main args)))
 
 (defn benchmark
   [& args]
   (binding [*parse-file-fn* parse-file
-            *solve-fn* solve-dp-iterative]
+            *solve-fn* solve-dp-memory-conscious-iterative]
     (apply benchmark-main args)))
 
 (defn parse-lines
@@ -129,7 +129,7 @@
 ;; For testing lazy seqs.
 ;; (def ^{:private true} realized-cells (atom 0))
 
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Dynamic programming (recursive solution, iterative process)
 ;;   The following solution uses an hash-table of lazy lists of values for backing up the bottom-up
 ;;   lookup table for the knapsack problem. The outer loop is on the capacity (0..K) whereas the
@@ -137,7 +137,7 @@
 ;;   optimal, but fails with OutOfMemoryError when the number of items/capacity grows.
 
 (defn- ^{:author "Andrea Richiardi"}
-  compute-cell
+  compute-value
   "Computes the value (a table cell) by looking at the maximum between
   the old value with the current capacity and (if the item fits) the
   item's value plus the value stored in the table for the difference
@@ -162,11 +162,12 @@
   ([items table k] (lazy-seq (dp-iter-k-partials items table k 0 1 (list 0))))
   ([items table k ith-value i partials]
    (if-let [is (seq items)]
-     (let [i+1-value (p :compute-cell (compute-cell k ith-value table (first is) i))]
+     (let [i+1-value (p :compute-value (compute-value k ith-value table (first is) i))]
        (recur (rest items) table k i+1-value (inc i) (cons i+1-value partials)))
      (reverse partials))))
 
-(defn- ^{ :author "Andrea Richiardi" } dp-iter-on-capacity
+(defn- ^{ :author "Andrea Richiardi" }
+  dp-iter-on-capacity
   ([items capacity] (dp-iter-on-capacity items capacity 0 {}))
   ([items capacity k cum-table]
    (if (<= k capacity)
@@ -198,12 +199,77 @@
 
 (defn- ^{ :author "Andrea Richiardi" } solve-dp-naive-table-iterative
   [input]
-  "A solver using dynamic programming and iterative processing. Small k is the current capacity. The
-  solution is built with the optimized clojure.data.int-map/int-map and its mapped values are all
-  lazy in order to avoid unnecessary computations."
+  "A solver using dynamic programming and iterative processing. The solution is built with the
+  optimized clojure.data.int-map/int-map and the mapped value lists are all lazy in order to avoid
+  unnecessary computations. Still, this solution takes too much space."
   (let [{:keys [item-count capacity items] :as input-map} input]
     ;; (reset! realized-cells 0)
     (let [table (dp-iter-on-capacity items capacity)]
       {:opt true
        :obj (nth (get table capacity) (count items))
        :taken-items (backtrack items capacity table)})))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Dynamic programming (recursive solution, iterative process)
+;;   The following solution tries to reduce the memory footprint of the previous. The outer loop is
+;;   on the items this time while the inner on the capacity (0..K). This allows to compute just
+;;   two "columns" of values at the time and therefore should avoid OutOfMemoryErros
+
+(defn- ^{:author "Andrea Richiardi"}
+  dp-compute-cell
+  "Computes a cell by looking at the maximum between the old value with
+  the current capacity and (if the item fits) the item's value plus the
+  value stored in the table for the difference between the item's weight
+  and the input capacity."
+  [prev-column item item-index k]
+  (let [[value weight] item
+        remaining-k (- k weight)
+        ;; (item-index-1, k)
+        prev-cell (get prev-column k)
+        prev-value (or (first prev-cell) 0)
+        ;; if the item fits -> (item-index-1, k - weight)
+        [alt-cell alt-value] (if (<= weight k) (let [c (get prev-column remaining-k)]
+                                                 (vector c (+ value (or (some-> c first) 0))))
+                                 (vector [] 0))]
+    (if (> alt-value prev-value)
+      ;; select the current item and the best combination of the others
+      (vector alt-value (conj (second alt-cell) 1))
+      (vector prev-value (conj (second prev-cell) 0)))))
+
+(defn- ^{:author "Andrea Richiardi" }
+  dp-compute-column
+  ([capacity item i prev-column] (dp-compute-column capacity item i prev-column 0 (int-map)))
+  ([capacity item i prev-column k new-column]
+   (if (<= k capacity)
+     (recur capacity item i prev-column (inc k)
+            (assoc new-column k (p :cell (dp-compute-cell prev-column item i k))))
+     new-column)))
+
+(defn- ^{:author "Andrea Richiardi" }
+  dp-compute-column-pairs
+  ([capacity items]
+   (dp-compute-column-pairs capacity (partition 2 (map-indexed #(vector (inc %1) %2) items)) (int-map)))
+  ([capacity item-pairs prev-column]
+   (if (seq item-pairs)
+     (recur capacity (rest item-pairs) (let [item-pair (first item-pairs)
+                                             first-index (ffirst item-pair)
+                                             first-item (second (first item-pair))
+                                             second-index (first (second item-pair))
+                                             second-item (second (second item-pair))
+                                             first-column (dp-compute-column capacity first-item first-index prev-column)]
+                                         (dp-compute-column capacity second-item second-index first-column)))
+     prev-column)))
+
+(defn- ^{ :author "Andrea Richiardi" } solve-dp-memory-conscious-iterative
+  [input]
+  "A solver using dynamic programming and iterative processing. The following solution tries to
+   reduce the memory footprint of the previous. The outer loop is on the items this time while the
+   inner on the capacity (0..K). This allows to compute just two \"columns\" of values at the time
+   and therefore should avoid OutOfMemoryErros."
+  (let [{:keys [item-count capacity items] :as input-map} input
+        last-column (dp-compute-column-pairs capacity items)
+        precious (get last-column capacity)]
+    precious
+    {:opt true
+     :obj (first precious)
+     :taken-items (second precious)}))
