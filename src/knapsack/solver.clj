@@ -20,7 +20,7 @@
 (declare solve-greedy)
 
 (def repl-args "-f src/knapsack/data/ks_lecture_dp_2")
-(def generate-input #(*parse-file-fn* (second (split %1 #"[ ]"))))
+(def generate-input #(parse-file (second (split %1 #"[ ]"))))
 
 (defn -main
   "Solves the problem at hand and prints the result on stdout."

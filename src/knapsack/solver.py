@@ -18,7 +18,7 @@ def solve_it(input_data):
     tmp_file.close()
 
     # Runs the command: java *-standalone.jar -file=tmp.data
-    process = Popen(['java', '-d64', '-Xmx4g', '-cp', '../../target/assignments-0.1.0-SNAPSHOT-standalone.jar', 'knapsack.solver', '-f ' + tmp_file_name], stdout=PIPE)
+    process = Popen(['java', '-d64', '-Xmx6g', '-cp', '../../target/assignments-0.1.0-SNAPSHOT-standalone.jar', 'knapsack.solver', '-f ' + tmp_file_name], stdout=PIPE)
     (stdout, stderr) = process.communicate()
 
     # removes the temporay file

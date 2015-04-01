@@ -1,35 +1,18 @@
 (ns knapsack.dp
   (:require [clojure.core.reducers :as r]
             [clojure.pprint :as pp :refer [pprint]]
-            [clojure.data.int-map :as di :refer [int-map int-set]]
+            [clojure.data.int-map :as di :refer [int-map int-set union] :exclude [merge]]
             [clojure.tools.trace :refer [trace]]
-            [taoensso.timbre.profiling :refer [p]]))
+            [taoensso.timbre.profiling :refer [p]])
+  (:import java.util.BitSet))
 
-;; Some fun with memoization
-(defn- int-memoize
-  "Returns a memoized version of a referentially transparent function
-  that accepts a single integer argument in the range [0,
-  Long/MAX_VALUE]. The returned function keeps a int-map as cache and is
-  more efficient than the default memoize for this particular set of
-  functions. This function uses a transient and it is not thread safe."
-  [f]
-  (let [cache (atom (int-map))]
-    (fn [key]
-      (if-let [e (find @cache key)]
-        (val e)
-        (let [new-val (f key)]
-          (swap! cache assoc key new-val)
-          new-val)))))
+(set! *warn-on-reflection* true)
 
 ;; For testing lazy seqs.
 ;; (def ^{:private true} realized-cells (atom 0))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Dynamic programming (recursive solution, iterative process)
-;;   The following solution uses an hash-table of lazy lists of values for backing up the bottom-up
-;;   lookup table for the knapsack problem. The outer loop is on the capacity (0..K) whereas the
-;;   inner is on the items. This solution works very well for small search spaces as it is always
-;;   optimal, but fails with OutOfMemoryError when the number of items/capacity grows.
 
 (defn- ^{:author "Andrea Richiardi"}
   compute-value
@@ -57,7 +40,7 @@
   ([items table k] (lazy-seq (dp-iter-k-partials items table k 0 1 (list 0))))
   ([items table k ith-value i partials]
    (if-let [is (seq items)]
-     (let [i+1-value (p :compute-value (compute-value k ith-value table (first is) i))]
+     (let [i+1-value (compute-value k ith-value table (first is) i)]
        (recur (rest items) table k i+1-value (inc i) (cons i+1-value partials)))
      (reverse partials))))
 
@@ -94,9 +77,11 @@
 
 (defn ^{ :author "Andrea Richiardi" } solve-dp-naive-table-iterative
   [input]
-  "A solver using dynamic programming and iterative processing. The solution is built with the
-  optimized clojure.data.int-map/int-map and the mapped value lists are all lazy in order to avoid
-  unnecessary computations. Still, this solution takes too much space."
+  "The following solution uses an hash-table (clojure.data.int-map/int-map) of lazy lists of values
+   for backing up the bottom-up lookup table for the knapsack problem. The outer loop is on the
+   capacity (0..K) whereas the inner is on the items. It works very well for small search spaces as
+   it is always optimal, but fails with OutOfMemoryError when the number of items/capacity
+   grows (from the lectures, it has a pseudo-polynomial comlexity)."
   (let [{:keys [item-count capacity items] :as input-map} input]
     ;; (reset! realized-cells 0)
     (let [table (dp-iter-on-capacity items capacity)]
@@ -106,22 +91,12 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Dynamic programming (recursive solution, iterative process)
-;;   The following solution tries to reduce the memory footprint of the previous. The outer loop is
-;;   on the items this time while the inner on the capacity (0..K). This allows to compute just
-;;   one "columns" of values at the time and therefore should avoid OutOfMemoryErrors.
-;;   This is still not true as the column, thought as a map k -> solution-so-far is still memory
-;;   eager. A better representation can be a (int-set of ks) -> solution-so-far.
 
-(defn dp-get-cell-by-k
+(defn ^{:author "Andrea Richiardi"}
+  dp-get-cell-by-k
   "Gets the cell given a capacity k"
-  [column k]
-  (get column k)
-  ;; (some-> (first (into [] (r/filter #(not= 0 (count (di/intersection (val %1) (conj (di/int-set) k)))) column)))
-          ;; key)
-  ;; me-> (first (filter #(empty? di/intersection (val %1) #{k}) column))
-  ;;         key))
-
-  )
+  [^"[Lclojure.lang.PersistentVector;" column ^long k]
+  (aget column k))
 
 (defn- ^{:author "Andrea Richiardi"}
   dp-compute-cell
@@ -129,20 +104,22 @@
   the current capacity and (if the item fits) the item's value plus the
   value stored in the table for the difference between the item's weight
   and the input capacity."
-  [prev-column item i k]
-  (let [[value weight] item
-        remaining-k (- k weight)
+  [prev-column item ^long i ^long k]
+  (let [[^long value ^long weight] item
         ;; (item-index-1, k)
         prev-cell (dp-get-cell-by-k prev-column k)
-        prev-value (or (first prev-cell) 0)]
+        ^long prev-value (or (first prev-cell) 0)]
     (if (<= weight k)
       ;; The item fits -> I need to check value at (item-index-1, k - weight)
       ;; but the current representation of prev-column does not allow me to get a cell by k.
       ;; I need to iterate on all its (key, value) pairs.
-      (let [alt-cell (dp-get-cell-by-k prev-column remaining-k)
-            alt-value (+ value (or (some-> alt-cell first) 0))]
+      (let [alt-cell (dp-get-cell-by-k prev-column (- k weight))
+            ^long alt-value (+ value (or (some-> alt-cell first) 0))]
         (if (> alt-value prev-value)
-          (vector alt-value (int-set (conj (second alt-cell) i))) ;; select the current item
+          ;; selects the current item, adding in the bit set
+          (vector alt-value (doto
+                                (if-let [^BitSet bits (second alt-cell)] ^BitSet (.clone bits) (BitSet.))
+                              (.set i)))
           (vector prev-value (second prev-cell))))
       (vector prev-value (second prev-cell)))))
 
@@ -152,75 +129,98 @@
   of capacities k associated with that cell. Partials is a map that
   caches the cell generated so far so that we save some memory in the
   progress."
-  ([capacity useful-weights item i prev-column] (dp-compute-column capacity
-                                                                   useful-weights
-                                                                   item i prev-column
-                                                                   (transient (di/int-map))
-                                                                   (hash-set)))
-  ([capacity useful-weights item i prev-column new-column partials]
-   (if (seq useful-weights)
-     (let [k (first useful-weights)
-           cell (dp-compute-cell prev-column item i k)
-           ;; simply caches cells
-           [cached-cell partials] (if (contains? partials cell) [cell partials] [cell (conj partials cell)])]
-
-       (recur capacity (rest useful-weights) item i prev-column (assoc! new-column k cached-cell) partials
-              ;; (if-let [value (get new-column cell)] ;; value is an int-set here
-                ;; (assoc! new-column cell (di/union value (conj (di/int-set) k)))
-              ;; (assoc! new-column cell (conj (di/int-set) k)))
-       ))
-     (persistent! new-column))))
-
-
+  ([capacity] (make-array clojure.lang.PersistentVector (inc capacity)))
+  ([capacity item-k-map item i prev-column] (dp-compute-column capacity
+                                                               (get item-k-map item)
+                                                               item i prev-column
+                                                               (dp-compute-column capacity)))
+  ([capacity ks item i prev-column ^"[Lclojure.lang.PersistentVector;" new-column]
+   (if (seq ks)
+     (let [^long k (first ks)
+           ^clojure.lang.PersistentVector cell (dp-compute-cell prev-column item i k)]
+       ;; recurring with the new k from the map item->necessary ks
+       (recur capacity (rest ks) item i prev-column (doto new-column (aset k cell))))
+     new-column)))
 
 (defn- ^{:author "Andrea Richiardi" }
   dp-compute-column-pairs
-  ([capacity items useful-weights]
-   (dp-compute-column-pairs capacity useful-weights (partition 2 (map-indexed #(vector (inc %1) %2) items)) (int-map)))
-  ([capacity useful-weights item-pairs prev-column]
-   (if (seq item-pairs)
-     (recur capacity useful-weights (rest item-pairs) (let [item-pair (first item-pairs)
-                                                            first-index (ffirst item-pair)
-                                                            first-item (second (first item-pair))
-                                                            second-index (first (second item-pair))
-                                                            second-item (second (second item-pair))
-                                                            first-column (dp-compute-column capacity useful-weights first-item first-index prev-column)]
-                                                        (dp-compute-column capacity useful-weights second-item second-index first-column)))
+  "Computes column pairs, one column at the time in memory."
+  ([capacity items item-k-map]
+   (dp-compute-column-pairs capacity item-k-map
+                            (partition-all 2 (map-indexed #(vector %1 %2) items))
+                            (dp-compute-column capacity)))
+
+  ([capacity item-k-map item-pairs prev-column]
+   (if-let [pair-seq (seq item-pairs)]
+     (recur capacity item-k-map (rest item-pairs) (let [item-pair (first pair-seq)
+                                                        first-index (ffirst item-pair)
+                                                        first-item (second (first item-pair))
+                                                        second-index (first (second item-pair))
+                                                        second-item (second (second item-pair))
+                                                        first-column (dp-compute-column capacity item-k-map first-item first-index prev-column)]
+                                                    (if (= (count item-pair) 2)
+                                                      (dp-compute-column capacity item-k-map second-item second-index first-column)
+                                                      first-column)))
      prev-column)))
 
-(defn feasible-capacities
+(defn- ^{:author "Andrea Richiardi"}
+  capacities-for-item-at-k
+  "Gets the necessary ks given thecurrent capacity and an item."
+  [items ^long k i]
+  (let [^long i-weight (second i)]
+    (if (< i-weight k)
+      (int-set #{k (- k i-weight)})
+      (int-set #{k}))))
+
+(defn- ^{:author "Andrea Richiardi"}
+  int-set-union
+  ([] (int-set))
+  ([acc-set new-set] (di/union acc-set new-set)))
+
+(defn- ^{:author "Andrea Richiardi"}
+  item->capacities
   "Computes the set of feasible capacities given the input set. This is
-  useful when the capacity is a very high number to avoid computation."
-  [capacity items]
-  (into #{} (conj (flatten (for [outer items
-                                 inner items
-                                 :let [weight-outer (second outer)
-                                       weight-inner (second inner)
-                                       weight-sum (+ weight-outer weight-inner)]
-                                 :when (or (not= outer inner) (<= weight-sum capacity))]
-                             [weight-outer weight-inner weight-sum])) capacity)))
+  useful when the capacity is a very high number to avoid
+  computation. In English, the i-th item will need to have entries in
+  the column for the i+1-th item. This function therefore will associate
+  i-th item to the necessary k(s) for its next, starting from the last
+  item, similarly to the backtrack algorithm of the naive
+  implementation."
+  ([capacity items]
+   (item->capacities capacity (reverse items) (reverse (partition 2 1 items))
+                     (transient (assoc (hash-map) (last items) (int-set #{capacity})))))
+  ([capacity items outer-is item-k-map]
+   (if (seq outer-is)
+     (let [[i-1 i] (first outer-is)
+           i-k-map (get item-k-map i)
+           ;; Reducers!
+           i-1-ks (r/fold int-set-union (r/map #(capacities-for-item-at-k (rest items) %1 i) i-k-map))]
+       (recur capacity (rest items) (rest outer-is) (assoc! item-k-map i-1 i-1-ks)))
+     (persistent! item-k-map))))
 
-(def repl-args "-f src/knapsack/data/ks_82_0")
+;; (def repl-args "-f src/knapsack/data/ks_lecture_dp_2")
 
-(defn ^{ :author "Andrea Richiardi" }
+(defn ^{:author "Andrea Richiardi"}
   solve-dp-memory-conscious-iterative
- "A solver using dynamic programming and iterative processing.  The
+  "A solver using dynamic programming and iterative processing.  The
   following solution tries to reduce the memory footprint of the
-  big-lookup-table one. The outer loop is on the items this time while
-  the inner on the capacity (0..K). This allows to compute just one
-  column of values at the time and therefore should avoid
-  OutOfMemoryErrors. [LATER...] This is still not enough as the column,
-  thought as a map k -> solution-so-far is still memory eager and
-  contains a lot of duplication. A better representation can be
-  a (int-set of ks) -> solution-so-far."
+  big-lookup-table approach. The outer loop is on the items this time
+  while the inner on the capacities (0..K). This allows to compute just
+  one column of values at the time and therefore should avoid
+  OutOfMemoryErrors. The solution then evolved to have a pre-walk in
+  order to build the necessary ks for each item, this is done when the
+  capacity/item ratio is > 5000 (empirical on Coursera data). Moreover,
+  a java.util.BitSet now contains the item indexes of the solution."
   [input]
-  (let [{:keys [item-count capacity items] :as input-map} input
-        useful-weights (trace :fw (feasible-capacities capacity items))
-        ;; last-column nil
-        last-column (dp-compute-column-pairs capacity items useful-weights) ;; compute
+  (let [{:keys [item-count ^long capacity items] :as input-map} input
+        item-k-map (if (> (/ capacity item-count) 5000) ;; do I need a pre-walk?
+                     (item->capacities capacity items)
+                     ;; Reducers!
+                     (r/fold merge (r/map #(hash-map %1 (int-set (range 1 (inc capacity)))) items)))
+        last-column (dp-compute-column-pairs capacity items item-k-map) ;; compute
         precious (dp-get-cell-by-k last-column capacity) ;; take the optimal solution
         objective (first precious)
-        taken-indexes (second precious)]
+        taken-indexes ^BitSet (second precious)]
     {:opt true
      :obj objective
-     :taken-items (map-indexed (fn [index item] (contains? taken-indexes (inc index))) items)}))
+     :taken-items (map-indexed (fn [index item] (.get taken-indexes index)) items)}))
