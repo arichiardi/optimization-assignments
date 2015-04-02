@@ -1,7 +1,7 @@
 (ns knapsack.dp
   (:require [clojure.core.reducers :as r]
+            [clojure.set :as set]
             [clojure.pprint :as pp :refer [pprint]]
-            [clojure.data.int-map :as di :refer [int-map int-set union] :exclude [merge]]
             [clojure.tools.trace :refer [trace]]
             [taoensso.timbre.profiling :refer [p]])
   (:import java.util.BitSet))
@@ -100,7 +100,7 @@
 
 (defn- ^{:author "Andrea Richiardi"}
   dp-compute-cell
-  "Computes a cell by loog at the maximum between the old value with
+  "Computes a cell by looking at the maximum between the old value with
   the current capacity and (if the item fits) the item's value plus the
   value stored in the table for the difference between the item's weight
   and the input capacity."
@@ -166,18 +166,11 @@
 (defn- ^{:author "Andrea Richiardi"}
   capacities-for-item-at-k
   "Gets the necessary ks given thecurrent capacity and an item."
-  [items ^long k i]
+  [^long k i]
   (let [^long i-weight (second i)]
-    (if (< i-weight k)
-      (int-set #{k (- k i-weight)})
-      (int-set #{k}))))
+    (if (< i-weight k) #{k (- k i-weight)} #{k})))
 
-(defn- ^{:author "Andrea Richiardi"}
-  int-set-union
-  ([] (int-set))
-  ([acc-set new-set] (di/union acc-set new-set)))
-
-(defn- ^{:author "Andrea Richiardi"}
+(defn ^{:author "Andrea Richiardi"}
   item->capacities
   "Computes the set of feasible capacities given the input set. This is
   useful when the capacity is a very high number to avoid
@@ -188,13 +181,13 @@
   implementation."
   ([capacity items]
    (item->capacities capacity (reverse items) (reverse (partition 2 1 items))
-                     (transient (assoc (hash-map) (last items) (int-set #{capacity})))))
+                     (transient (assoc (hash-map) (last items) #{capacity}))))
   ([capacity items outer-is item-k-map]
    (if (seq outer-is)
      (let [[i-1 i] (first outer-is)
            i-k-map (get item-k-map i)
            ;; Reducers!
-           i-1-ks (r/fold int-set-union (r/map #(capacities-for-item-at-k (rest items) %1 i) i-k-map))]
+           i-1-ks (r/fold set/union (r/map #(capacities-for-item-at-k %1 i) i-k-map))]
        (recur capacity (rest items) (rest outer-is) (assoc! item-k-map i-1 i-1-ks)))
      (persistent! item-k-map))))
 
@@ -213,12 +206,12 @@
   a java.util.BitSet now contains the item indexes of the solution."
   [input]
   (let [{:keys [item-count ^long capacity items] :as input-map} input
-        item-k-map (if (> (/ capacity item-count) 5000) ;; do I need a pre-walk?
+        item-k-map (if (or (> (/ capacity item-count) 5000) (>= item-count 10000)) ;; do I need a pre-walk?
                      (item->capacities capacity items)
-                     ;; Reducers!
-                     (r/fold merge (r/map #(hash-map %1 (int-set (range 1 (inc capacity)))) items)))
+                     ;; Reducers here are slower (benchmarked with 10000 elements) !
+                     (apply merge (map #(hash-map %1 (range 1 (inc capacity))) items)))
         last-column (dp-compute-column-pairs capacity items item-k-map) ;; compute
-        precious (dp-get-cell-by-k last-column capacity) ;; take the optimal solution
+        precious (dp-get-cell-by-k last-column capacity)                ;; take the optimal solution
         objective (first precious)
         taken-indexes ^BitSet (second precious)]
     {:opt true

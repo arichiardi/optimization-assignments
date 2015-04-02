@@ -1,7 +1,7 @@
 (ns ^{:author "Andrea Richiardi"
       :doc "My attempt to the knapsack problem, in Clojure."}
   knapsack.solver
-  (:require :reload-all [clojure.string :as string :refer [trim blank? split join]]
+  (:require [clojure.string :as string :refer [trim blank? split join]]
             [clojure.java.io :as io :refer [reader]]
             [clojure.pprint :as pp :refer [pprint]]
             [clojure.tools.cli :refer [parse-opts summarize]]
