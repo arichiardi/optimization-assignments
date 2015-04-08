@@ -8,9 +8,10 @@
                  [org.clojure/data.int-map "0.1.0"]
                  [org.clojure/tools.trace "0.7.8"]
                  [com.taoensso/timbre "3.4.0"]
-                 [byte-streams "0.2.0-alpha8"]
+                 [rhizome "0.2.4"]
                  [criterium "0.4.3"]]
-  :plugins [[cider/cider-nrepl "0.8.2"]]
+  :plugins [[cider/cider-nrepl "0.8.2"]
+            [refactor-nrepl "0.3.0-SNAPSHOT"]]
   :main knapsack.solver
   :jvm-opts ["-Xmx4g" "-XX:+UseConcMarkSweepGC"]
   :aot :all)

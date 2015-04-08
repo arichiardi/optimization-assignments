@@ -10,7 +10,8 @@
                                       *solve-fn*
                                       *create-output-fn*
                                       *parse-file-fn*]]
-            [knapsack.dp :as dp])
+            [knapsack.dynamic :as dp]
+            [knapsack.branchbound :as bb])
   (:gen-class))
 
 (set! *warn-on-reflection* true)

@@ -1,4 +1,4 @@
-(ns knapsack.dp
+(ns knapsack.dynamic
   (:require [clojure.core.reducers :as r]
             [clojure.set :as set]
             [clojure.pprint :as pp :refer [pprint]]
@@ -32,12 +32,12 @@
       prev-value)))
 
 (defn- ^{:author "Andrea Richiardi"}
-  dp-iter-k-partials
+  dp-iter-on-items
   "Computes a lazy sequence of the dp solution for the k-th capacity
   step, maximizing the values of our objective function. Here k and i
   are indexes: k from 0 to capacity (outer loop) and i from 0 to (count
   items), controlled by this iterative process."
-  ([items table k] (lazy-seq (dp-iter-k-partials items table k 0 1 (list 0))))
+  ([items table k] (lazy-seq (dp-iter-on-items items table k 0 1 (list 0))))
   ([items table k ith-value i partials]
    (if-let [is (seq items)]
      (let [i+1-value (compute-value k ith-value table (first is) i)]
@@ -49,7 +49,7 @@
   ([items capacity] (dp-iter-on-capacity items capacity 0 {}))
   ([items capacity k cum-table]
    (if (<= k capacity)
-     (recur items capacity (inc k) (assoc cum-table k (dp-iter-k-partials items cum-table k)))
+     (recur items capacity (inc k) (assoc cum-table k (dp-iter-on-items items cum-table k)))
      cum-table)))
 
 (defn- ^{:author "Andrea Richiardi"}
