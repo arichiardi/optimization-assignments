@@ -1,4 +1,5 @@
 (ns knapsack.branchbound
+  (:refer-clojure :exclude [partition])
   (:require [clojure.zip :as z]
             [clojure.core.reducers :as r]
             [clojure.pprint :as pp :refer [pprint]]
@@ -33,16 +34,17 @@
   "Computes an optimistic value for the bonding phase. Uses linear relaxation.
   If the integer index excluded-idx is 0 < excluded-idx < (count
   items) then that item will be excluded from the estimate."
-  [capacity sorted-indexed-items excluded-idx]
-  (reduce (fn [[k acc-val] [idx [iv iw]]]
-            (if-not (= excluded-idx idx)
-              (if (>= (- k iw) 0)
-                [(- k iw) (+ acc-val iv)]
-                (let [frac (long (with-precision 10 :rounding FLOOR
-                                                 (* iv (/ k iw))))]
-                  [0 (+ acc-val frac)])
-                )
-              [k acc-val])) [capacity 0] sorted-indexed-items))
+  [capacity sorted-indexed-items current-item-index ^BitSet solution-index-set]
+  (second (reduce (fn [[k acc-val] [idx [iv iw]]]
+                    (if (>= k 0)
+                      (if-not (.get solution-index-set idx)
+                        (if (> idx current-item-index)
+                          (if (>= (- k iw) 0)
+                            [(- k iw) (+ acc-val iv)]
+                            [0 (+ acc-val (long (with-precision 10 :rounding FLOOR (* iv (/ k iw)))))])
+                          [k acc-val])
+                        [(- k iw) (+ acc-val iv)])
+                      [k acc-val])) [capacity 0] sorted-indexed-items)))
 
 ;;;;;;;;;;
 ;; Tree ;;
@@ -50,7 +52,7 @@
 (defrecord Node [capacity estimate value children solution]
   java.lang.Object
   (toString [_]
-    (str (apply str (interpose "\n" (map str [capacity estimate value]))) "\n" (some-> solution .toString))))
+    (str (apply str (interpose "\n" (map str [value capacity estimate]))) "\n" (some-> solution .toString))))
 
 (defn- ^{:author "Andrea Richia"}
   node-ctor
@@ -81,7 +83,7 @@
   "A branch is always a Node with contains either the fact that we take
   the item or that we don't put it in the knapsack."
   [^Node taken-branch ^Node not-taken-branch]
-  (lazy-seq (list taken-branch not-taken-branch)))
+  (lazy-seq [taken-branch not-taken-branch]))
 
 (defn- ^{:author "Andrea Richiardi"}
   node-taken
@@ -116,42 +118,67 @@
   [estimate-f item-value item-weight item-index depth-1-node]
   (lazy-seq
    (let [{:keys [capacity estimate value solution children]} depth-1-node]
-     (let [taken (do (swap! realized-cells inc)
-                     (node-ctor :capacity (- capacity item-weight)
-                                :value (+ value item-value)
-                                :estimate
-                                :solution (add-solution-index (if-let [^BitSet s solution]
-                                                                (.clone s)
-                                                                (BitSet.)) item-index)))
-           not-taken depth-1-node]
+     (swap! realized-cells inc)
+     (let [taken-solution (add-solution-index (if-let [^BitSet s solution]
+                                                (.clone s)
+                                                (BitSet.)) item-index)
+           taken (node-ctor :capacity (- capacity item-weight)
+                            :value (+ value item-value)
+                            :solution taken-solution
+                            :estimate (estimate-f item-index taken-solution))
+           not-taken (node-with-estimate depth-1-node (estimate-f item-index solution))]
        (children-ctor taken not-taken)))))
+
+(defn- ^{:author "Andrea Richiardi"}
+  part-iter
+  ([n coll i part parts]
+   (if (seq coll)
+     (if (< i n)
+       (recur n (rest coll) (inc i) (cons (first coll) part) parts)
+       (recur n coll 0 () (cons (reverse part) parts)))
+     (reverse (if (seq part)
+                (cons (reverse part) parts)
+                parts))))
+  ([n step coll i part parts]
+   ("TODO")))
+
+(defn- ^{:author "Andrea Richiardi"}
+  partition
+  ([n coll] (lazy-seq (part-iter n coll 0 () ())))
+  ([n step coll] (lazy-seq (part-iter n step coll 0 () ())))
+  ;; ([n step pad coll]
+    ;; (lazy-seq (partition n coll 0 () ())))
+
+  )
 
 (defn- ^{:author "Andrea Richiardi"}
   depth-monoid-op
   [acc-depth-1-pairs depth-pairs]
-  ;; using take here because (partition 2 ...) produces StackOverflow
-  (into [] (r/take 2 (map #(node-with-children %1 %2) (flatten depth-pairs) acc-depth-1-pairs))))
+  ;; We need to use (into [] (r/take 2..) ...) or our custom partition here because (partition 2
+  ;; ...) produces StackOverflow
+  (partition 2 (map #(node-with-children %1 %2) (flatten depth-pairs) acc-depth-1-pairs)))
 
 (defn- ^{:author "Andrea Richiardi"}
   bb-tree
   "Builds the tree, returning its root."
-  ([capacity indexed-items]
+  ([estimate-f capacity indexed-items]
    (let [root (node-ctor :capacity capacity :solution (BitSet.))]
-     (bb-tree (partial estimate indexed-items ) indexed-items root (list root) nil)))
+     (bb-tree estimate-f indexed-items root (list root) nil)))
   ([estimate-f indexed-items root depth-1 acc]
    (if (seq indexed-items)
      (let [[index [value weight]] (first indexed-items)
-           new-depth (map #(bb-generate-branches estimate-f value weight index %1) (flatten depth-1))]
+           new-depth (map #(bb-generate-branches estimate-f value weight index %1) (trace :depth-1 (flatten depth-1)))]
        (recur estimate-f (rest indexed-items) root new-depth (cons new-depth acc)))
      (node-with-children root (flatten (reduce depth-monoid-op (first acc) (rest acc)))))))
 
 (def repl-args "-f src/knapsack/data/ks_lecture_dp_2")
+(def input {:item-count 3, :capacity 10, :items [[45 5] [48 8] [35 3]]})
 ;; (def input (knapsack.solver/generate-input repl-args))
 
 (defn- show-tree
   [root]
   (viz/view-tree node-branch? node-children root
-                 :options {:dpi 40}
+                 :options {:dpi 56}
                  :node->descriptor (fn [^Node n] {:label (.toString n)})))
 
 (defn ^{:author "Andrea Richiardi"}
@@ -160,9 +187,9 @@
   (reset-cells)
   (let [{:keys [item-count ^long capacity items] :as input-map} input
         indexed-items (map-indexed #(vector %1 %2) items)
-        sorted-indexed-items (sort-by #(value-over-weight (second %1)) > indexed-items)
+        sorted-indexed-items (trace :sorted (sort-by #(value-over-weight (second %1)) > indexed-items))
         estimate-f (partial estimate capacity sorted-indexed-items)
-        tree (bb-tree capacity indexed-items)
+        tree (bb-tree estimate-f capacity indexed-items)
         ]
     tree
     #_{:opt true
