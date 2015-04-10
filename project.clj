@@ -13,5 +13,5 @@
   :plugins [[cider/cider-nrepl "0.8.2"]
             [refactor-nrepl "0.3.0-SNAPSHOT"]]
   :main knapsack.solver
-  :jvm-opts ["-Xmx4g" "-XX:+UseConcMarkSweepGC"]
+  :jvm-opts ^:replace ["-Xmx4g" "-XX:+UseConcMarkSweepGC" "-XX:-OmitStackTraceInFastThrow"]
   :aot :all)
