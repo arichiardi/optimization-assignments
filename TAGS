@@ -1,0 +1,179 @@
+
+epl-v10.html,0
+
+test/assignments/core_test.clj,29
+(deftest a-testa-test5,111
+
+src/coloring/solver.py,255
+def solve_it(input_data):solve_it5,44
+        file_location = sys.argv[1].strip()file_location36,811
+        input_data_file = open(file_location, 'r')input_data_file37,855
+        input_data = ''.join(input_data_file.readlines())input_data38,906
+
+src/coloring/submit.py,995
+Metadata = namedtuple("Metadata", ['url', 'name', 'part_data'])Metadata13,179
+Part = namedtuple("Part", ['sid', 'input_file', 'source', 'name'])Part14,243
+def check_login(metadata, login, password):check_login16,311
+def load_meta_data():load_meta_data36,992
+def submit():submit60,1776
+def login_prompt():login_prompt89,2665
+def basic_prompt():basic_prompt95,2839
+def part_prompt(parts):part_prompt102,3155
+def get_challenge(c_url, email, sid):get_challenge132,4141
+def challenge_response(email, passwd, challenge):challenge_response149,4730
+def challenge_url(url):challenge_url159,5003
+def submit_url(url):submit_url164,5139
+def submit_solution(c_url, email_address, ch_resp, sid, output, source, state, ch_aux):submit_solution169,5270
+def get_source(source_file):get_source197,6253
+    pkg = __import__('solver')pkg206,6431
+    solve_it = pkg.solve_itsolve_it210,6581
+def load_input_data(fileLocation):load_input_data216,6698
+def output(part):output222,6876
+
+src/knapsack/branchbound.clj,1114
+(def ^{:private true} realized-cells (atom 0))^{:private16,514
+(def ^{:private true} reset-cells #(reset! realized-cells 0))^{:private17,561
+(defn value-over-weightvalue-over-weight23,676
+(defn sum-all-estimatesum-all-estimate28,782
+(defn fractional-estimatefractional-estimate42,1506
+(defrecord Node [capacity estimate value index children solution]Node61,2420
+(defn node-ctornode-ctor66,2638
+(defn node-with-childrennode-with-children73,2969
+(defn node-with-estimatenode-with-estimate80,3270
+(defn children-ctorchildren-ctor87,3558
+(defn node-takennode-taken93,3796
+(defn node-not-takennode-not-taken97,3857
+(defn node-childrennode-children101,3929
+(defn node-childrennode-children105,3985
+(defn node-has-children?node-has-children?109,4041
+(def ^{:doc "Is it a branch? In this representation if it has children it is a branch, otherwise a^{:doc113,4108
+(defn node-valid?node-valid?116,4248
+(defn add-solution-indexadd-solution-index120,4309
+(defn show-treeshow-tree125,4461
+(defn- best-first-walkbest-first-walk131,4647
+(defn best-first-searchbest-first-search142,5129
+
+src/knapsack/solver.py,412
+def repl_it():repl_it7,104
+def solve_it(input_data):solve_it12,182
+def launch_it(file_name, skip_compile):launch_it28,742
+    file_location = ''file_location54,1635
+    is_repl = Falseis_repl55,1658
+    parser = argparse.ArgumentParser(description='Solves the knapsack problem')parser56,1678
+    group = parser.add_mutually_exclusive_group()group58,1903
+    args = parser.parse_args()args61,2136
+
+src/knapsack/dynamic.clj,684
+(defn- ^{:author "Andrea Richiardi"}^{:author17,556
+(defn- ^{:author "Andrea Richiardi"}^{:author34,1283
+(defn- ^{ :author "Andrea Richiardi" }^{47,1922
+(defn- ^{:author "Andrea Richiardi"}^{:author55,2213
+(defn ^{ :author "Andrea Richiardi" } solve-dp-naive-table-iterative^{78,3340
+(defn ^{:author "Andrea Richiardi"}^{:author95,4319
+(defn- ^{:author "Andrea Richiardi"}^{:author101,4486
+(defn- ^{:author "Andrea Richiardi" }^{:author126,5758
+(defn- ^{:author "Andrea Richiardi" }^{:author145,6833
+(defn- ^{:author "Andrea Richiardi"}^{:author166,8170
+(defn ^{:author "Andrea Richiardi"}^{:author173,8400
+(defn ^{:author "Andrea Richiardi"}^{:author196,9478
+
+src/knapsack/Solver.java,170
+public class Solver {Solver9,188
+    public static void main(String[] args) {main14,253
+    public static void solve(String[] args) throws IOException {solve25,523
+
+src/knapsack/solver.clj,532
+(def repl-args "-f src/knapsack/data/ks_lecture_dp_2")repl-args23,823
+(def generate-input #(parse-file (second (split %1 #"[ ]"))))generate-input24,878
+(defn -main-main26,941
+(defn benchmarkbenchmark34,1200
+(defn parse-linesparse-lines40,1357
+(defn- parse-fileparse-file50,1845
+(defn- bool->longbool->long65,2383
+(defn- output-stringoutput-string69,2430
+(defn- ^{ :author "Andrea Richiardi" }^{79,2778
+(defn- solve-greedy-itersolve-greedy-iter92,3268
+(defn- ^{ :author "Coursera Team" } solve-greedy^{102,3755
+
+src/knapsack/solverPython.py,325
+Item = namedtuple("Item", ['index', 'value', 'weight'])Item5,78
+def solve_it(input_data):solve_it7,135
+        file_location = sys.argv[1].strip()file_location46,1138
+        input_data_file = open(file_location, 'r')input_data_file47,1182
+        input_data = ''.join(input_data_file.readlines())input_data48,1233
+
+src/knapsack/submit.py,995
+Metadata = namedtuple("Metadata", ['url', 'name', 'part_data'])Metadata13,179
+Part = namedtuple("Part", ['sid', 'input_file', 'source', 'name'])Part14,243
+def check_login(metadata, login, password):check_login16,311
+def load_meta_data():load_meta_data36,992
+def submit():submit60,1776
+def login_prompt():login_prompt89,2665
+def basic_prompt():basic_prompt95,2839
+def part_prompt(parts):part_prompt102,3155
+def get_challenge(c_url, email, sid):get_challenge132,4141
+def challenge_response(email, passwd, challenge):challenge_response149,4730
+def challenge_url(url):challenge_url159,5003
+def submit_url(url):submit_url164,5139
+def submit_solution(c_url, email_address, ch_resp, sid, output, source, state, ch_aux):submit_solution169,5270
+def get_source(source_file):get_source197,6253
+    pkg = __import__('solver')pkg206,6431
+    solve_it = pkg.solve_itsolve_it210,6581
+def load_input_data(fileLocation):load_input_data216,6698
+def output(part):output222,6876
+
+src/knapsack/solverJava.py,255
+def solve_it(input_data):solve_it7,89
+        file_location = sys.argv[1].strip()file_location31,619
+        input_data_file = open(file_location, 'r')input_data_file32,663
+        input_data = ''.join(input_data_file.readlines())input_data33,714
+
+src/knapsack/branchbound/impl.clj,750
+(def ^{:private true} realized-cells (atom 0))^{:private23,758
+(def ^{:private true} reset-cells #(reset! realized-cells 0))^{:private24,805
+(defn- bb-generate-branchesbb-generate-branches26,868
+(defn- part-iterpart-iter42,1770
+(defn- partitionpartition88,3199
+(defn- depth-monoid-opdepth-monoid-op95,3415
+(defn- bb-bottom-up-treebb-bottom-up-tree100,3611
+(def repl-args "-f src/knapsack/data/ks_lecture_dp_2")repl-args115,4389
+(def input {:item-count 3, :capacity 10, :items [[45 5] [48 8] [35 3]]})input116,4444
+(defn ^{:author "Andrea Richiardi"}^{:author120,4577
+(defn- bb-top-down-treebb-top-down-tree141,5495
+(defn- bb-generate-childrenbb-generate-children157,6308
+(defn ^{:author "Andrea Richiardi"}^{:author186,7660
+
+src/screenname/solver.py,30
+def solve_it():solve_it4,43
+
+src/screenname/submit.py,935
+Metadata = namedtuple("Metadata", ['url', 'name', 'part_data'])Metadata13,179
+Part = namedtuple("Part", ['sid', 'input_file', 'source', 'name'])Part14,243
+def check_login(metadata, login, password):check_login16,311
+def load_meta_data():load_meta_data36,992
+def submit():submit60,1776
+def login_prompt():login_prompt89,2652
+def basic_prompt():basic_prompt95,2826
+def part_prompt(parts):part_prompt102,3142
+def get_challenge(c_url, email, sid):get_challenge132,4128
+def challenge_response(email, passwd, challenge):challenge_response149,4717
+def challenge_url(url):challenge_url159,4990
+def submit_url(url):submit_url164,5126
+def submit_solution(c_url, email_address, ch_resp, sid, output, source, state, ch_aux):submit_solution169,5257
+def get_source(source_file):get_source197,6240
+    pkg = __import__('solver')pkg206,6418
+    solve_it = pkg.solve_itsolve_it210,6568
+def output(part):output216,6685
+
+src/assignments/core.clj,333
+(def ^{:dynamic true^{:dynamic13,433
+(def ^{:dynamic true^{:dynamic18,651
+(def ^{:dynamic true^{:dynamic22,774
+(defn solver-mainsolver-main27,927
+(defn benchmark-mainbenchmark-main37,1382
+(def ^{:private true} cli-options^{:private50,1926
+(defn- error-msg [errors]error-msg57,2175
+(defn- exit [status msg]exit61,2312
+
+project.clj,57
+(defproject assignments "0.1.0-SNAPSHOT"assignments1,0

@@ -1,5 +1,5 @@
-(ns ^{:author "Andrea Richiardi" :doc "Branch and bound implementation targeted at problems with a
-huge number of items (ks_10000_0)." }
+(ns ^{:author "Andrea Richiardi"
+      :doc "Branch and bound implementation, common functions." }
   knapsack.branchbound
   (:refer-clojure :exclude [partition])
   (:require [clojure.zip :as z]
@@ -19,204 +19,198 @@ huge number of items (ks_10000_0)." }
 ;;;;;;;;;;;;;;;;
 ;; Relaxation ;;
 ;;;;;;;;;;;;;;;;
-(defn- relax
-  "Computes the Branch and Bound relaxation for an item."
-  [item]
-  )
 
-(defn- value-over-weight
+(defn value-over-weight
   "Retrieves the value/weight ratio."
-  [item]
-  (/ (first item) (second item)))
+  ^double [item]
+  (/ (double (first item)) (second item)))
 
-(defn- sum-all-estimate
+(defn sum-helper
+  "Helper for summing and computing the optimistic evaluation."
+  [processed-index ^BitSet solution sorted-indexed-items acc]
+  (let [[k acc-sum] acc]
+    (if (and (seq sorted-indexed-items) (> k 0))
+      (let [[idx [iv iw]] (first sorted-indexed-items)] 
+        (if-not (.get solution idx)
+          (if (> idx processed-index)
+            (if (>= (- k iw) 0)
+              (recur processed-index solution (rest sorted-indexed-items) [(- k iw) (+ acc-sum iv)])
+              (recur processed-index solution (rest sorted-indexed-items) [0 (+ acc-sum (long (* iv (/ (double k) iw))))]))
+            (recur processed-index solution (rest sorted-indexed-items) [k acc-sum]))
+          (recur processed-index solution (rest sorted-indexed-items) [(- k iw) (+ acc-sum iv)])))
+      acc)))
+
+(defn sum-all-estimate
   "Computes an optimistic value for the bonding phase. Uses linear relaxation.
   If the integer index excluded-idx is 0 < excluded-idx < (count
-  items) then that item will be excluded from the estimate."
-  [capacity sorted-indexed-items current-item-index ^BitSet solution-index-set]
-  (second (reduce (fn [[k acc-val] [idx [iv iw]]]
-                    (if (>= k 0)
-                      (if-not (.get solution-index-set idx)
-                        (if (> idx current-item-index)
-                          [(- k iw) (+ acc-val iv)]
-                          [k acc-val])
-                        [(- k iw) (+ acc-val iv)])
-                      [k acc-val])) [capacity 0] sorted-indexed-items)))
-
-(defn- fractional-estimate
-  "Computes an optimistic value for the bonding phase. Uses linear relaxation.
-  If the integer index excluded-idx is 0 < excluded-idx < (count
-  items) then that item will be excluded from the estimate."
-  [capacity sorted-indexed-items current-item-index ^BitSet solution-index-set]
-  (second (reduce (fn [[k acc-val] [idx [iv iw]]]
-                    (if (>= k 0)
-                      (if-not (.get solution-index-set idx)
-                        (if (> idx current-item-index)
-                          (if (>= (- k iw) 0)
+  items) then that item will be excluded from the estimate [Just for DEBUG]."
+  ^long [capacity sorted-indexed-items item-index ^BitSet solution-index-set]
+  (second (r/reduce (fn [[k acc-val] [idx [iv iw]]]
+                      (if (> k 0)
+                        (if-not (.get solution-index-set idx)
+                          (if (> idx item-index)
                             [(- k iw) (+ acc-val iv)]
-                            [0 (+ acc-val (long (with-precision 10 :rounding FLOOR (* iv (/ k iw)))))])
-                          [k acc-val])
-                        [(- k iw) (+ acc-val iv)])
-                      [k acc-val])) [capacity 0] sorted-indexed-items)))
+                            [k acc-val])
+                          [(- k iw) (+ acc-val iv)])
+                        [k acc-val])) [capacity 0] sorted-indexed-items)))
+
+
+(defn fractional-estimate
+  "Computes an optimistic value for the bonding phase. Uses linear relaxation.
+  If the integer index excluded-idx is 0 < excluded-idx < (count items)
+  then that item will be excluded from the estimate."
+  ^long [^long capacity sorted-indexed-items processed-index ^BitSet solution]
+  (second (sum-helper processed-index solution sorted-indexed-items [capacity 0])))
 
 ;;;;;;;;;;
-;; Tree ;;
+;; Node ;;
 ;;;;;;;;;;
-(defrecord Node [capacity estimate value children solution]
+
+(defrecord Node [capacity estimate value index children solution]
   java.lang.Object
   (toString [_]
-    (str (apply str (interpose "\n" (map str [value capacity estimate]))) "\n" (some-> solution .toString))))
+    (str (clojure.string/join "\n" (map str [value capacity estimate])) "\n" (some-> solution .toString))))
 
-(defn- node-ctor
+(defn node-horiz-str
+  [{:keys [capacity estimate value index children solution]}]
+  (str "|" (clojure.string/join " " [index value capacity estimate (some-> solution .toString)]) "|"))
+
+(defn node-ctor
   "Builds a node. Destructures the input in the following keys: capacity
   estimate value solution and children."
-  [& {:keys [capacity estimate value children solution]
-      :or {capacity 0 estimate 0 value 0 children nil solution nil}}]
-  (Node. capacity estimate value children solution))
+  [& {:keys [capacity estimate value index children solution]
+      :or {capacity 0 estimate 0 value 0 index -1 children nil solution nil}}]
+  (Node. capacity estimate value index children solution))
 
-(defn- node-with-children
+(defn node-with-children
   "Copy constructor of a node. Takes all the fileds from an existing
   node but (lazily) attaches the children to it."
-  [node children]
-  (let [{:keys [capacity estimate value _ solution]} node]
-    (Node. capacity estimate value (lazy-seq children) solution)))
+  [^Node node children]
+  (let [{:keys [capacity estimate value index _ solution]} node]
+    (Node. capacity estimate value index (lazy-seq children) solution)))
 
-(defn- node-with-estimate
+(defn node-with-estimate
   "Copy constructor of a node. Takes all the fileds from the existing
   node but attaches the input estimate to it."
-  [node estimate]
-  (let [{:keys [capacity _ value children solution]} node]
-    (Node. capacity estimate value children solution)))
+  [^Node node ^long estimate]
+  (let [{:keys [capacity _ value index children solution]} node]
+    (Node. capacity estimate value index children solution)))
 
-(defn- children-ctor
+(defn children-ctor
   "A branch is always a Node with contains either the fact that we take
   the item or that we don't put it in the knapsack."
   [^Node taken-branch ^Node not-taken-branch]
-  (lazy-seq [taken-branch not-taken-branch]))
+  (lazy-seq (remove nil? [taken-branch not-taken-branch])))
 
-(defn- node-taken
-  [node]
+(defn child-ctor
+  "A branch is always a Node with contains either the fact that we take
+  the item or that we don't put it in the knapsack."
+  [^Node not-taken-branch]
+  (lazy-seq [not-taken-branch]))
+
+(defn node-taken
+  [^Node node]
   (first (:children node)))
 
-(defn- node-not-taken
-  [node]
-  (first (next (:children node))))
+(defn node-not-taken
+  [^Node node]
+  (fnext (:children node)))
 
-(defn- node-children
-  [node]
+(defn node-children
+  [^Node node]
   (:children node))
 
-(defn- node-branch?
-  "Does it have children?"
-  [node]
-  (instance? Node node))
-
-(defn- node-children
-  [node]
+(defn node-children
+  [^Node node]
   (:children node))
 
-(defn- node-has-children?
-  [node]
+(defn node-has-children?
+  [^Node node]
   (seq (:children node)))
 
-(defn- add-solution-index
+(def ^{:doc "Is it a branch? In this representation if it has children it is a branch, otherwise a
+leaf"} node-branch? node-has-children?)
+
+(defn node-valid?
+  [^Node node]
+  (>= (:capacity node) 0))
+
+(defn ^{ :author "Andrea Richiardi" }
+  assert-node-solution-capacity
+  "Calculates the total capacity of a solution."
+  [{:keys [item-count capacity items] :as input-map}
+   {:keys [^BitSet solution] :as node}]
+  (let [output-capacity (reduce (fn [cum [idx [iv iw]]] (if (.get solution idx)
+                                                         (+ cum iw)
+                                                         cum))
+                                0
+                                (map-indexed vector items))] 
+    (println "Assert " capacity " >= " output-capacity) 
+    (assert (>= capacity output-capacity))))
+
+(defn add-solution-index
   "Returns a new BitSet with new-index added to it."
   [^BitSet solution ^long new-index]
   (doto solution (.set new-index)))
 
-(defn- bb-generate-branches"
-  Generates a new pair of branches (taken and the not-taken branch) lazily."
-  [estimate-f item-value item-weight item-index depth-1-node]
-  (lazy-seq
-   (let [{:keys [capacity estimate value solution children]} depth-1-node]
-     (swap! realized-cells inc)
-     (let [taken-solution (add-solution-index (if-let [^BitSet s solution]
-                                                (.clone s)
-                                                (BitSet.)) item-index)
-           taken (node-ctor :capacity (- capacity item-weight)
-                            :value (+ value item-value)
-                            :solution taken-solution
-                            :estimate (estimate-f item-index taken-solution))
-           not-taken (node-with-estimate depth-1-node (estimate-f item-index solution))]
-       (children-ctor taken not-taken)))))
-
-(defn- part-iter
-  ([n coll i part parts]
-   (if (seq coll)
-     (if (< i n)
-       (recur n (rest coll) (inc i) (cons (first coll) part) parts)
-       (recur n coll 0 () (cons (reverse part) parts)))
-     (reverse (if (seq part)
-                (cons (reverse part) parts)
-                parts))))
-  ([n step coll i part parts]
-   ("TODO")))
-
-(defn- partition
-  ([n coll] (lazy-seq (part-iter n coll 0 () ())))
-  ([n step coll] (lazy-seq (part-iter n step coll 0 () ())))
-  ;; ([n step pad coll]
-    ;; (lazy-seq (partition n coll 0 () ())))
-
-  )
-
-(defn- depth-monoid-op
-  [acc-depth-1-pairs depth-pairs]
-  ;; We need to use (into [] (r/take 2..) ...) or our custom partition here because (partition 2
-  ;; ...) produces StackOverflow
-  (partition 2 (map #(node-with-children %1 %2) (flatten depth-pairs) acc-depth-1-pairs)))
-
-(defn- bb-tree
-  "Builds the tree, returning its root."
-  ([estimate-f capacity indexed-items]
-   (let [solution (BitSet.)
-         root (node-ctor :capacity capacity
-                         :estimate (estimate-f -1 solution)
-                         :solution solution)]
-     (bb-tree estimate-f indexed-items root (list root) nil)))
-  ([estimate-f indexed-items root depth-1 acc]
-   (if (seq indexed-items)
-     (let [[index [value weight]] (first indexed-items)
-           new-depth (map #(bb-generate-branches estimate-f value weight index %1) (flatten depth-1))]
-       (recur estimate-f (rest indexed-items) root new-depth (cons new-depth acc)))
-     (node-with-children root (flatten (reduce depth-monoid-op (first acc) (rest acc)))))))
-
-(def repl-args "-f src/knapsack/data/ks_lecture_dp_2")
-(def input {:item-count 3, :capacity 10, :items [[45 5] [48 8] [35 3]]})
-;; (def input (knapsack.solver/generate-input repl-args))
-
-(defn- show-tree
+(defn show-tree
   [root]
   (viz/view-tree node-branch? node-children root
                  :options {:dpi 48}
-                 :node->descriptor (fn [^Node n] {:label (.toString n)})))
+                 :node->descriptor (fn [n] {:label (str n)})
+                 :node->cluster :index
+                 :cluster->descriptor (fn [n] {:label n})))
 
-(defn- best-first-search
-  "It explores the tree using best-first search, return the optimal solution (a Node) or nil."
-  ([^Node tree]
-   {:pre [(some? tree)]} (best-first-search tree nil))
-  ([^Node best-node unvisited-nodes]
-   (if (node-has-children? best-node)
-     (let [sorted (sort-by :estimate > (concat unvisited-nodes
-                                               (filter #(>= (:capacity ^Node %1) 0) (node-children best-node))))
-           new-best (first sorted)
-           pruned (filter node-has-children? (rest sorted))]
-       #_(print "<-sorted" (doall (map #(println (.toString ^Node %1)) sorted)))
-       ;; filter executes the pruning of the undesired nodes))
-       (recur new-best pruned))
-     best-node)))
-   
+(defn dump-tree
+  [root filename]
+  (viz/save-tree node-branch? node-children root
+                 :filename filename
+                 :options {:dpi 24}
+                 :node->descriptor (fn [n] {:label (str n)})
+                 :node->cluster :index
+                 :cluster->descriptor (fn [n] {:label n})))
 
-(defn ^{:author "Andrea Richiardi"}
-  solve-bb-iterative
-  [input]
-  (reset-cells)
-  (let [{:keys [item-count ^long capacity items] :as input-map} input
-        indexed-items (map-indexed #(vector %1 %2) items)
-        sorted-indexed-items (sort-by #(value-over-weight (second %1)) > indexed-items)
-        estimate-f (partial sum-all-estimate capacity sorted-indexed-items)
-        tree (bb-tree estimate-f capacity indexed-items)
-        best-node (best-first-search tree)]
-    {:opt true
-     :obj (:value best-node)
-     :taken-items (map-indexed (fn [index item] (.get (:solution best-node) index)) items)}))
+(defn- best-first-acc-walk
+  [keyfn branch? children best-nodes unvisited]
+  (let [best (first best-nodes)]
+    (if (branch? best) 
+      (let [sorted (sort-by keyfn > (concat unvisited (seq (children best))))
+            new-best (first sorted)]
+        (recur keyfn branch? children (cons new-best best-nodes) (rest sorted)))
+      (do (assert (empty? (filter #(and (branch? %1) (> (:estimate %1) (:estimate best))) unvisited))) 
+        #_(doall (map #(println (node-horiz-str %1)) unvisited))
+        best-nodes))))
+
+(defn best-first-seq
+  "It explores the tree using best-first search. Returns a lazy list of
+  nodes which are valued the best according to keyfn, a function
+  accepting a node and returning the value to compare on.
+  The other parameters follow tree-seq convention: branch? evaluates
+  true when the input node can have children (even if it does not have
+  them) and children returns them given a node."
+  [keyfn branch? children root]
+  {:pre [(some? root)]}
+  (lazy-seq (best-first-acc-walk keyfn branch? children (list root) nil)))
+
+(defn- best-first-simple-walk
+  [keyfn branch? children best-node unvisited]
+  (if (branch? best-node)
+    (let [sorted (sort-by keyfn > (concat unvisited (seq (children best-node))))
+          new-best (first sorted)]
+      (if new-best 
+        (recur keyfn branch? children new-best (rest sorted)) 
+        best-node))
+    (do (assert (empty? (filter #(and (branch? %1) (> (:estimate %1) (:estimate best-node))) unvisited))) 
+        #_(doall (map #(println (node-horiz-str %1)) unvisited))
+        best-node)))
+
+(defn best-first-node
+  "It explores the tree using best-first search. Returns a lazy list of
+  nodes which are valued the best according to keyfn, a function
+  accepting a node and returning the value to compare on.
+  The other parameters follow tree-seq convention: branch? evaluates
+  true when the input node can have children (even if it does not have
+  them) and children returns them given a node."
+  [keyfn branch? children root]
+  {:pre [(some? root)]}
+  (best-first-simple-walk keyfn branch? children root nil))

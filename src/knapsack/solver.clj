@@ -11,7 +11,7 @@
                                       *create-output-fn*
                                       *parse-file-fn*]]
             [knapsack.dynamic :as dp]
-            [knapsack.branchbound :as bb])
+            [knapsack.branchbound.impl :as bl])
   (:gen-class))
 
 (set! *warn-on-reflection* true)
@@ -27,14 +27,14 @@
   "Solves the problem at hand and prints the result on stdout."
   [& args]
   (binding [*parse-file-fn* parse-file
-            *solve-fn* dp/solve-dp-memory-conscious-iterative
+            *solve-fn* bl/solve-bb-best-first-top-down
             *create-output-fn* output-string]
     (apply solver-main args)))
 
 (defn benchmark
   [& args]
   (binding [*parse-file-fn* parse-file
-            *solve-fn* dp/solve-dp-memory-conscious-iterative]
+            *solve-fn* bl/solve-bb-best-first-top-down]
     (apply benchmark-main args)))
 
 (defn parse-lines
@@ -66,7 +66,7 @@
   [value]
   (if value 1 0))
 
-(defn- output-string
+(defn output-string
   "Parses the solution map and build the solution outputstring.
   The solution map should have the following format:
   {:obj x
@@ -76,17 +76,19 @@
   (let [{:keys [obj opt taken-items]} solution]
     (str obj " " (bool->long opt) "\n" (join " " (map bool->long taken-items)))))
 
-(defn- ^{ :author "Andrea Richiardi" }
-  solution-capacity
+(defn ^{ :author "Andrea Richiardi" }
+  assert-solution-capacity
   "Calculates the total capacity of a solution."
   [{:keys [item-count capacity items] :as input-map}
    {:keys [opt obj taken-items] :as output-map}]
   {:pre [(= (count items) (count taken-items))]}
-  (reduce (fn [cum zipped] (if (second zipped)
-                            (+ cum (nth (first zipped) 1 0))
-                            cum))
-          0
-          (map vector items taken-items)))
+  (let [output-capacity (reduce (fn [cum zipped] (if (second zipped)
+                                                  (+ cum (nth (first zipped) 1 0))
+                                                  cum))
+                                0
+                                (map vector items taken-items))] 
+    (println "Assert " capacity " >= " output-capacity) 
+    (assert (>= capacity output-capacity))))
 
 ;; A greedy performance disaster
 (defn- solve-greedy-iter

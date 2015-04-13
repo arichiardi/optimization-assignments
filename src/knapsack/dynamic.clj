@@ -64,7 +64,7 @@
                                      (get table capacity)
                                      []))
   ([items capacity table i reverse-items ith-values taken-items]
-   (if (> i 0)
+   (if (pos? i)
      (let [[value weight] (first reverse-items)
            remaining-capacity (- capacity weight)
            ith-value (nth ith-values i)
@@ -147,7 +147,7 @@
   "Computes column pairs, one column at the time in memory."
   ([capacity items item-k-map]
    (dp-compute-column-pairs capacity item-k-map
-                            (partition-all 2 (map-indexed #(vector %1 %2) items))
+                            (partition-all 2 (map-indexed vector items))
                             (dp-compute-column capacity)))
 
   ([capacity item-k-map item-pairs prev-column]
@@ -192,6 +192,7 @@
      (persistent! item-k-map))))
 
 ;; (def repl-args "-f src/knapsack/data/ks_lecture_dp_2")
+;; (def input (knapsack.solver/generate-input repl-args))
 
 (defn ^{:author "Andrea Richiardi"}
   solve-dp-memory-conscious-iterative
