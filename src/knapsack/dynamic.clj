@@ -192,7 +192,7 @@
      (persistent! item-k-map))))
 
 ;; (def repl-args "-f src/knapsack/data/ks_lecture_dp_2")
-;; (def input (knapsack.solver/generate-input repl-args))
+;; (def input (assignments.common/generate-input repl-args))
 
 (defn ^{:author "Andrea Richiardi"}
   solve-dp-memory-conscious-iterative

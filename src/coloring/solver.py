@@ -1,43 +1,71 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
 
+import os, argparse, sys
+from subprocess import Popen, PIPE
+
+def repl_it():
+
+    lein = Popen(['lein', 'repl'])
+    retcode = lein.wait()
 
 def solve_it(input_data):
-    # Modify this code to run your optimization algorithm
 
-    # parse the input
-    lines = input_data.split('\n')
+    # Writes the inputData to a temporay file
+    tmp_file_name = 'tmp.data'
+    tmp_file = open(tmp_file_name, 'w')
+    tmp_file.write(input_data)
+    tmp_file.close()
 
-    first_line = lines[0].split()
-    node_count = int(first_line[0])
-    edge_count = int(first_line[1])
+    # Runs the command: java *-standalone.jar -file=tmp.data
+    process = Popen(['java', '-d64', '-Xmx4g', '-cp', '../../target/assignments-0.1.0-SNAPSHOT-standalone.jar', 'coloring.solver', '-f ' + tmp_file_name], stdout=PIPE)
+    (stdout, stderr) = process.communicate()
 
-    edges = []
-    for i in range(1, edge_count + 1):
-        line = lines[i]
-        parts = line.split()
-        edges.append((int(parts[0]), int(parts[1])))
+    # removes the temporay file
+    os.remove(tmp_file_name)
+    return stdout.strip()
 
-    # build a trivial solution
-    # every node has its own color
-    solution = range(0, node_count)
+def launch_it(file_name, skip_compile):
 
-    # prepare the solution in the specified output format
-    output_data = str(node_count) + ' ' + str(0) + '\n'
-    output_data += ' '.join(map(str, solution))
+    input_data_file = open(file_name.strip(), 'r')
+    input_data = ''.join(input_data_file.readlines())
+    input_data_file.close()
 
-    return output_data
+    # Writes the inputData to a temporay file
+    tmp_file_name = 'tmp.data'
+    tmp_file = open(tmp_file_name, 'w')
+    tmp_file.write(input_data)
+    tmp_file.close()
 
+    if (skip_compile == False):
+       # Runs lein uberjar synchrously
+       lein = Popen(['lein', 'do', 'clean,', 'uberjar'])
+       retcode = lein.wait()
 
-import sys
+    # Runs the command: java *-standalone.jar -file=tmp.data
+    process = Popen(['java', '-d64', '-Xmx4g', '-cp', '../../target/assignments-0.1.0-SNAPSHOT-standalone.jar', 'coloring.solver', '-f ' + tmp_file_name], stdout=PIPE)
+    (stdout, stderr) = process.communicate()
+    # removes the temporay file
+    os.remove(tmp_file_name)
+    return stdout.strip()
+
 
 if __name__ == '__main__':
-    if len(sys.argv) > 1:
-        file_location = sys.argv[1].strip()
-        input_data_file = open(file_location, 'r')
-        input_data = ''.join(input_data_file.readlines())
-        input_data_file.close()
-        print solve_it(input_data)
-    else:
-        print 'This test requires an input file.  Please select one from the data directory. (i.e. python solver.py ./data/gc_4_1)'
+    file_location = ''
+    is_repl = False
+    parser = argparse.ArgumentParser(description='Solves the knapsack problem')
+    parser.add_argument('-s', '--skip-compile', dest='skip_compile', action='store_true', help='Skip the compilation step and run old jar file')
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument('-f', '--file', dest='file', help='The file to process')
+    group.add_argument('-r', '--repl', dest='repl', action='store_true', help='Launch a REPL session')
+    args = parser.parse_args()
 
+    # print 'Input file: ', args.file
+    # print 'Requires Repl: ', args.repl
+
+    if (args.file != None):
+        print launch_it(args.file, args.skip_compile)
+    elif (args.repl == True):
+        repl_it()
+    else:
+        parser.print_help()

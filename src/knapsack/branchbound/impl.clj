@@ -140,9 +140,9 @@ It produces the solution tree and it then walks in depth using best-search first
   (let [{:keys [item-count ^long capacity items] :as input-map} input
         sorted-items (sort-by bb/value-over-weight > items)
         sorted-indexed-items (map-indexed vector sorted-items)
-        item->sorted-index (apply merge (map (comp (partial apply hash-map)
-                                                   (fn [[index item]] (vector item index)))  
-                                             sorted-indexed-items))
+        item->sorted-index (->> (apply merge (map (comp (partial apply hash-map)
+                                                    (fn [[index item]] (vector item index)))  
+                                              sorted-indexed-items)))
         estimate-f (partial bb/fractional-estimate capacity sorted-indexed-items)
         children-f (partial bb-make-children estimate-f item-count sorted-items)
         solution (BitSet.)
@@ -184,8 +184,4 @@ It produces the solution tree and it then walks in depth using best-search first
 
     (def input {:item-count 3, :capacity 10, :items [[1 2] [15 5] [6 3]]})
     (t/is (= 22 (:obj (solve-bb-best-first-top-down input))))
-    (t/is (= '(true true true) (:taken-items (solve-bb-best-first-top-down input))))
-
-    (def input {:item-count 3, :capacity 10, :items [[1 2] [15 5] [6 3]]})
-    
-    ))
+    (t/is (= '(true true true) (:taken-items (solve-bb-best-first-top-down input))))))

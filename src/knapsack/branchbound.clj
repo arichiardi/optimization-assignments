@@ -29,7 +29,7 @@
   "Helper for summing and computing the optimistic evaluation."
   [processed-index ^BitSet solution sorted-indexed-items acc]
   (let [[k acc-sum] acc]
-    (if (and (seq sorted-indexed-items) (> k 0))
+    (if (and (seq sorted-indexed-items) (pos? k))
       (let [[idx [iv iw]] (first sorted-indexed-items)] 
         (if-not (.get solution idx)
           (if (> idx processed-index)
